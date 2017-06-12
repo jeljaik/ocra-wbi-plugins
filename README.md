@@ -1,3 +1,5 @@
+This forked repo is for replacing EigenLgsm with KDL
+
 # ocra-wbi-plugins
 Controller implementations and plugins for communicating between the whole body controller libraries developed at ISIR, [`ocra-recipes`](https://github.com/ocra-recipes/ocra-recipes), and the iCub Whole Body Interface, [`WBI`](https://github.com/robotology/wholebodyinterface), libraries.
 
