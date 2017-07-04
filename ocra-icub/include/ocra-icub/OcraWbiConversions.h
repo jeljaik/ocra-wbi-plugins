@@ -35,6 +35,9 @@
 #include <yarp/os/Log.h>
 #include <wbi/wbi.h>
 #include <yarpWholeBodyInterface/yarpWholeBodyInterface.h>
+#include "kdl/frames_io.hpp"
+#include "kdl/frames.hpp"
+#include <ocra/util/ErrorsHelper.h>
 
 #include "ocra-icub/Utilities.h"
 
@@ -61,6 +64,10 @@ public:
     static bool eigenToYarpVector(const Eigen::VectorXd &eigenVector, yarp::sig::Vector &yarpVector);
     static const int DIM_TRANSLATION = 3;
     static const int DIM_ROTATION = 3;
+    //======================= KDL METHODS ==========================================================
+    static bool KDLFrameTowbiFrame(const KDL::Frame &kdlframe, wbi::Frame &wbiframe);
+    static bool wbiFrameToKDLFrame(const wbi::Frame &frame, KDL::Frame &kdlframe);
+    static bool ocraKDLToWbiTwistVector(Eigen::Twistd &t_ocra, Eigen::Twistd &t_wbi);
 };
 } /* ocra_icub */
 #endif //OCRA_WBI_CONVERSIONS_H

@@ -1,10 +1,5 @@
 #include <ocra-icub-server/IcubControllerServer.h>
 
-// IcubControllerServer::IcubControllerServer()
-// {
-//
-// }
-
 IcubControllerServer::IcubControllerServer( std::shared_ptr<wbi::wholeBodyInterface> robot,
                                             std::string icubName,
                                             const bool usingFloatingBase,
@@ -41,7 +36,7 @@ void IcubControllerServer::getRobotState(Eigen::VectorXd& q, Eigen::VectorXd& qd
     // OCRA_INFO("Getting robot state");
     q.resize(nDoF);
     qd.resize(nDoF);
-    
+
     wbi->getEstimates(wbi::ESTIMATE_JOINT_POS, q.data(), ALL_JOINTS);
 
     //FIXME: This is temporary hack for experiments in IIT
@@ -60,7 +55,7 @@ void IcubControllerServer::getRobotState(Eigen::VectorXd& q, Eigen::VectorXd& qd
     wbi->getEstimates(wbi::ESTIMATE_JOINT_VEL, qd.data(), ALL_JOINTS);
 //     qd.setZero();
     iDynTree::JointPosDoubleArray qj;
-    
+
     qj.resize(nDoF);
     if (isFloatingBase)
     {
@@ -108,12 +103,84 @@ void IcubControllerServer::getRobotState(Eigen::VectorXd& q, Eigen::VectorXd& qd
                                 wbi_T_root_Vector[0],
                                 wbi_T_root_Vector[1],
                                 wbi_T_root_Vector[2]);
+        
+    }
+}
+
+void IcubControllerServer::getRobotStateKDL(Eigen::VectorXd& q, Eigen::VectorXd& qd, KDL::Frame& H_root, KDL::Twist& T_root)
+{
+    // OCRA_INFO("Getting robot state");
+    q.resize(nDoF);
+    qd.resize(nDoF);
+
+    wbi->getEstimates(wbi::ESTIMATE_JOINT_POS, q.data(), ALL_JOINTS);
+
+    //FIXME: This is temporary hack for experiments in IIT
+    if (this->firstRun) {
+        this->qdPrevious.resize(nDoF);
+        this->qPrevious.resize(nDoF);
+        this->qdPrevious.setZero();
+        qd.setZero();
+        this->qPrevious = q;
+        this->firstRun = false;
+    } else {
+        qd = (1.0/0.010)*(q - this->qPrevious);
+        qPrevious = q;
+    }
+    //FIXME: COMMENT TO USE NUMERICAL DIFFERENTIATION
+    wbi->getEstimates(wbi::ESTIMATE_JOINT_VEL, qd.data(), ALL_JOINTS);
+//     qd.setZero();
+    iDynTree::JointPosDoubleArray qj;
+
+    qj.resize(nDoF);
+    if (isFloatingBase)
+    {
+        if (useOdometry) {
+            qj.zero();
+            wbi->getEstimates(wbi::ESTIMATE_JOINT_POS, qj.data(), ALL_JOINTS);
+
+            // Fill wbi_H_root_Vector "manually" from odometry
+            odometry.updateKinematics(qj);
+            std::string currentFixedLink;
+            controller->getFixedLinkForOdometry(currentFixedLink);
+            odometry.changeFixedFrame(currentFixedLink);
+            iDynTree::Transform wbi_H_root_Transform = odometry.getWorldLinkTransform(odometry.model().getDefaultBaseLink());
+            // This mapping is ROW-WISE
+            Matrix<double, 16, 1> wbi_H_root_Vector_tmp(wbi_H_root_Transform.asHomogeneousTransform().data());
+            wbi_H_root_Vector = wbi_H_root_Vector_tmp;
+
+            // Find out which tasks are active
+            int leftSupport = 1; int rightSupport = 1;
+            this->controller->getContactState(leftSupport, rightSupport);
+            // For now assuming that contact of left and right foot is permanent for debugging purposes
+            rootFrameVelocity(q, qd, wbi_H_root_Transform, 1e-5, leftSupport, rightSupport, wbi_T_root_Vector);
+//             rootFrameVelocityPivLU(q, qd, wbi_H_root_Transform, wbi_T_root_Vector);
+//             rootFrameVelocityPivLU(q, qd, wbi_H_root_Transform, leftSupport, rightSupport, wbi_T_root_Vector);
+
+//             std::cout << "Root velocity is: " << wbi_T_root_Vector.transpose() << std::endl;
+
+
+        } else {
+            // Get root position as a 16x1 vector and get root vel as a 6x1 vector
+            wbi->getEstimates(wbi::ESTIMATE_BASE_POS, wbi_H_root_Vector.data());
+            wbi->getEstimates(wbi::ESTIMATE_BASE_VEL, wbi_T_root_Vector.data());
+        }
+//         qj.zero();
+
+        // Convert to a wbi::Frame then to a Dispd
+        wbi::frameFromSerialization(wbi_H_root_Vector.data(), wbi_H_root);
+        ocra_icub::OcraWbiConversions::wbiFrameToKDLFrame(wbi_H_root, H_root);
+
+
+        // Fill the KDL Twist
+        // Both KDL Twists and the output of wbi->getEstimes is VEL/ROT
+        T_root = ocra::util::EigenVectorToKDLTwist(wbi_T_root_Vector);
     }
 }
 
 bool IcubControllerServer::initializeOdometry(std::string model_file, std::string initialFixedFrame)
 {
-    // The URDF file has mode joints than those used by the yarpWholeBodyInterface, and these two should match. Therefore, the following method creates a list of joints as those that constitute ROBOT_MAIN_JOINTS in yarpWholeBodyInterface.ini
+    // The URDF file has more joints than those used by the yarpWholeBodyInterface, and these two should match. Therefore, the following method creates a list of joints as those that constitute ROBOT_MAIN_JOINTS in yarpWholeBodyInterface.ini
     std::vector<std::string> consideredJoints = getCanonical_iCubJoints();
     if (!odometry.loadModelFromFileWithSpecifiedDOFs(model_file, consideredJoints)) {
         std::cout << "[ERROR] icubcontrollerServer::initializeOdometry  Could not load URDF model of the robot from the specified path: " << model_file << std::endl;

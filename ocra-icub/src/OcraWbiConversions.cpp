@@ -212,6 +212,7 @@ using namespace ocra_icub;
         v_ocra << r,
                 t,
                 q;
+        return true;
     }
 
 
@@ -231,3 +232,51 @@ using namespace ocra_icub;
 
             return true;
         }
+
+// ============================================ KDL CONVERSIONS =======================================================
+bool OcraWbiConversions::KDLFrameTowbiFrame(const KDL::Frame &kdlframe, wbi::Frame &wbiframe)
+{
+    // Get position from kdl frame
+    double p_wbi[3] = {kdlframe.p.x(), kdlframe.p.y(), kdlframe.p.z()};
+    // Get rotation from kdl frame
+    Eigen::VectorXd tmpq(4);
+    // Quaternion order: x, y, z, w. As per http://docs.ros.org/hydro/api/orocos_kdl/html/classKDL_1_1Rotation.html#a37f92d1b2c5e9708771543c521c276c4 the norm of the resulting quaternion should be 1.
+    kdlframe.M.GetQuaternion(tmpq[0], tmpq[1], tmpq[2], tmpq[3]);
+    // Check norm
+    if (std::abs(tmpq.norm() - 1) > 0.01)
+        OCRA_WARNING("Non unit-norm quaternion is being transformed into wbiFrame");
+    // Quaternion order: x, y, z, w. This expects a unit-norm quaternion. Is it?
+    wbiframe = wbi::Frame(wbi::Rotation::quaternion(tmpq[0], tmpq[1], tmpq[2], tmpq[3]), p_wbi);
+    return true;
+}
+
+bool OcraWbiConversions::wbiFrameToKDLFrame(const wbi::Frame &wbiframe, KDL::Frame &kdlframe)
+{
+    // Get quaternion from wbi frame as a vector of doubles
+    double wbiQuat[4];
+    wbiframe.R.getQuaternion(wbiQuat[0], wbiQuat[1], wbiQuat[2], wbiQuat[3]);
+    // Use the quaternion (array of doubles) to build a KDL Rotation. In KDL and WBI the quaternion representation is the same
+    KDL::Rotation kdlRot = KDL::Rotation::Quaternion(wbiQuat[0], wbiQuat[1], wbiQuat[2], wbiQuat[3]);
+    // Build a KDL::Vector from the position vector of the WBI Frame object
+    KDL::Vector kdlVec = KDL::Vector(wbiframe.p[0], wbiframe.p[1], wbiframe.p[2]);
+    // Use the previously built rotation and position vectors to build a KDL Frame
+    kdlframe = KDL::Frame(kdlRot, kdlVec);
+    return true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

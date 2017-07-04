@@ -27,6 +27,7 @@
 #include <ocra-icub/OcraWbiModel.h>
 
 using namespace ocra_icub;
+using namespace ocra::util;
 
 #define ALL_JOINTS -1
 #define FREE_ROOT_DOF 6
@@ -59,9 +60,12 @@ public:
     Eigen::VectorXd                                         ddq; // Joint accelerations
     Eigen::VectorXd                                         tau; // joint torques
     Eigen::Displacementd                                    Hroot; // translation of root
+    KDL::Frame                                              HrootKDL;
     wbi::Frame                                              Hroot_wbi;
     Eigen::Twistd                                           Troot; // twist of root (velocity)
+    KDL::Twist                                              TrootKDL;
     Eigen::Twistd                                           Troot_wbi; // twist of root (velocity)
+    KDL::Twist                                              Troot_wbiKDL; // twist of root (velocity)
     Eigen::MatrixXd                                         M; // Mass inertia matrix (col major for ocra control)
     Eigen::MatrixXd                                         M_full; // Full Mass inertia matrix (col major)
     MatrixXdRm                                              M_full_rm; // Mass inertia matrix (from WholeBodyInterface, row major)
@@ -89,8 +93,11 @@ public:
     Eigen::Vector3d                                         DJDq;
 
     Eigen::Displacementd                                    H_com;
+    KDL::Frame                                              H_comKDL;
     std::vector< Eigen::Displacementd >                     segPosition;
+    std::vector< KDL::Frame >                               segPositionKDL;
     std::vector< Eigen::Twistd >                            segVelocity;
+    std::vector< KDL::Twist >                               segVelocityKDL;
     std::vector< double >                                   segMass; // not set
     std::vector< Eigen::Vector3d >                          segCoM; // not set
     std::vector< Eigen::Matrix<double,TRANS_ROT_DIM,TRANS_ROT_DIM> > segMassMatrix; // not set
@@ -99,6 +106,7 @@ public:
     std::vector< MatrixXdRm >                               segMassMatrix_rm;
 */
     std::vector< Eigen::Vector3d >                          segMomentsOfInertia; // not set
+    //TODO: What's the right replacement for Rotation3d in KDL
     std::vector< Eigen::Rotation3d >                        segInertiaAxes; // not set
 
     std::vector< Eigen::Matrix<double,TRANS_ROT_DIM,Eigen::Dynamic> >   segJacobian;
@@ -109,6 +117,7 @@ public:
     std::vector< Eigen::Matrix<double,TRANS_ROT_DIM,Eigen::Dynamic> >   segJdot; // not set
     std::vector< Eigen::Matrix<double,TRANS_ROT_DIM,Eigen::Dynamic> >   segJointJacobian;
     std::vector< Eigen::Twistd >                            segJdotQdot;
+    std::vector< KDL::Twist >                               segJdotQdotKDL;
     std::map< std::string, int >                            segIndexFromName;
     std::vector< std::string >                              segNameFromIndex;
     Eigen::Matrix<double,TRANS_ROT_DIM,Eigen::Dynamic>      Jroot;
@@ -121,9 +130,12 @@ public:
         ,ddq(Eigen::VectorXd::Zero(nDofFree-TRANS_ROT_DIM))
         ,tau(Eigen::VectorXd::Zero(nDofFree-TRANS_ROT_DIM))
         ,Hroot(Eigen::Displacementd(0,0,1))
+        ,HrootKDL(KDL::Frame::Identity())
         ,Troot(Eigen::Twistd(0,0,0,0,0,0))
+        ,TrootKDL(KDL::Twist::Zero())
         ,Hroot_wbi(wbi::Frame())
         ,Troot_wbi(Eigen::Twistd(0,0,0,0,0,0))
+        ,Troot_wbiKDL(KDL::Twist::Zero())
         ,M(Eigen::MatrixXd::Zero(ndof, ndof))
         ,M_full(Eigen::MatrixXd::Zero(nDofFree, nDofFree))
         ,M_full_rm(Eigen::MatrixXd::Zero(nDofFree, nDofFree))
@@ -143,9 +155,12 @@ public:
         ,DJ_com_rm(MatrixXdRm::Zero(COM_POS_DIM, nDofFree))
         ,DJDq(Eigen::Vector3d(0,0,0))
         ,segPosition(nbSeg, Eigen::Displacementd(0,0,0))
+        ,segPositionKDL(nbSeg, KDL::Frame::Identity())
         ,segVelocity(nbSeg, Eigen::Twistd(0,0,0,0,0,0))
+        ,segVelocityKDL(nbSeg, KDL::Twist::Zero())
         ,segMass(nbSeg, 0)
         ,H_com(Eigen::Displacementd(0,0,0))
+        ,H_comKDL(KDL::Frame::Identity())
         ,segCoM(nbSeg, Eigen::Vector3d(0,0,0))
         ,segMassMatrix(nbSeg, Eigen::Matrix<double,6,6>::Zero())
         ,segMomentsOfInertia(nbSeg, Eigen::Vector3d(0,0,0))
@@ -157,6 +172,7 @@ public:
         ,segJdot(nbSeg, Eigen::Matrix<double,TRANS_ROT_DIM,Eigen::Dynamic>::Zero(TRANS_ROT_DIM,ndof))
         ,segJointJacobian(nbSeg, Eigen::Matrix<double,TRANS_ROT_DIM,Eigen::Dynamic>::Zero(TRANS_ROT_DIM,ndof))
         ,segJdotQdot(nbSeg, Eigen::Twistd(0,0,0,0,0,0))
+        ,segJdotQdotKDL(nbSeg, KDL::Twist::Zero())
     {
         vel_com_old = Eigen::Vector3d::Zero();
 
@@ -196,8 +212,8 @@ OcraWbiModel::OcraWbiModel(const std::string& robotName, const int robotNumDOF, 
     // Get full M0
     MatrixXdRm M_rm_total_mass(full_wbi_size,full_wbi_size);
     robot->computeMassMatrix(owm_pimpl->q.data(), wbi::Frame(), M_rm_total_mass.data());
-    owm_pimpl->total_mass = M_rm_total_mass(0,0); 
-    
+    owm_pimpl->total_mass = M_rm_total_mass(0,0);
+
     dqPrevious = Eigen::VectorXd::Zero(owm_pimpl->q.size());
 }
 
@@ -273,10 +289,20 @@ const Eigen::Displacementd& OcraWbiModel::getFreeFlyerPosition() const
     return owm_pimpl->Hroot;
 }
 
+const KDL::Frame& OcraWbiModel::getFreeFlyerPositionKDL() const
+{
+    return owm_pimpl->HrootKDL;
+}
+
 const Eigen::Twistd& OcraWbiModel::getFreeFlyerVelocity() const
 {
     // set by setState or setFreeFlyerVelocity
     return owm_pimpl->Troot;
+}
+
+const KDL::Twist& OcraWbiModel::getFreeFlyerVelocityKDL() const
+{
+    return owm_pimpl->TrootKDL;
 }
 
 const Eigen::MatrixXd& OcraWbiModel::getInertiaMatrix() const
@@ -382,12 +408,12 @@ const Eigen::Vector3d& OcraWbiModel::getCoMPosition() const
 //     wbi::Frame H;
 // //     double initTime = yarp::os::Time::now();
 //     robot->computeH(owm_pimpl->q.data(),owm_pimpl->Hroot_wbi,wbi::iWholeBodyModel::COM_LINK_ID,H);
-// //     std::cout<<"OcraWbiModel::getCoMPosition - computeH takes: " << yarp::os::Time::now() - initTime << std::endl; 
-// 
+// //     std::cout<<"OcraWbiModel::getCoMPosition - computeH takes: " << yarp::os::Time::now() - initTime << std::endl;
+//
 //     OcraWbiConversions::wbiFrameToEigenDispd(H,owm_pimpl->H_com);
 // //     initTime = yarp::os::Time::now();
 //     owm_pimpl->pos_com = owm_pimpl->H_com.getTranslation();
-// //     std::cout<<"OcraWbiModel::getCoMPosition - owm_pimpl->H_com.getTranslation() takes: " << yarp::os::Time::now() - initTime << std::endl;     
+// //     std::cout<<"OcraWbiModel::getCoMPosition - owm_pimpl->H_com.getTranslation() takes: " << yarp::os::Time::now() - initTime << std::endl;
 // /*
 //     printf("Get COM Poisiton\n");
 //     std::cout << owm_pimpl->pos_com << std::endl;
@@ -401,14 +427,14 @@ void OcraWbiModel::updateCoMPosition() {
     wbi::Frame H;
 //     double initTime = yarp::os::Time::now();
     robot->computeH(owm_pimpl->q.data(),owm_pimpl->Hroot_wbi,wbi::iWholeBodyModel::COM_LINK_ID,H);
-//     std::cout<<"OcraWbiModel::getCoMPosition - computeH takes: " << yarp::os::Time::now() - initTime << std::endl; 
+//     std::cout<<"OcraWbiModel::getCoMPosition - computeH takes: " << yarp::os::Time::now() - initTime << std::endl;
 
     OcraWbiConversions::wbiFrameToEigenDispd(H,owm_pimpl->H_com);
 //     initTime = yarp::os::Time::now();
     this->mutex.lock();
     owm_pimpl->pos_com = owm_pimpl->H_com.getTranslation();
     this->mutex.unlock();
-//     std::cout<<"OcraWbiModel::getCoMPosition - owm_pimpl->H_com.getTranslation() takes: " << yarp::os::Time::now() - initTime << std::endl;     
+//     std::cout<<"OcraWbiModel::getCoMPosition - owm_pimpl->H_com.getTranslation() takes: " << yarp::os::Time::now() - initTime << std::endl;
 //     Eigen::Vector3d tmp = owm_pimpl->pos_com;
 }
 
@@ -440,12 +466,12 @@ void OcraWbiModel::updateCoMVelocity() {
         owm_pimpl->vel_com = getCoMJacobian()*owm_pimpl->dq;
         this->mutex.unlock();
     }
-    
+
     // Differentiating velocity
     this->mutex.lock();
     owm_pimpl->acc_com = (1.0/0.010)*(owm_pimpl->vel_com - owm_pimpl->vel_com_old);
     this->mutex.unlock();
-    
+
     owm_pimpl->vel_com_old = owm_pimpl->vel_com;
 }
 
@@ -545,6 +571,15 @@ const Eigen::Displacementd& OcraWbiModel::getSegmentPosition(int index) const
     return owm_pimpl->segPosition[index];
 }
 
+const KDL::Frame& OcraWbiModel::getSegmentPositionKDL(int index) const
+{
+    wbi::Frame H;
+    // std::cout << "H_root in get Seg Position\n" << owm_pimpl->Hroot_wbi.toString() << std::endl;
+    robot->computeH(owm_pimpl->q.data(),owm_pimpl->Hroot_wbi,index,H);
+    OcraWbiConversions::wbiFrameToKDLFrame(H, owm_pimpl->segPositionKDL[index]);
+    return owm_pimpl->segPositionKDL[index];
+}
+
 const Eigen::Twistd& OcraWbiModel::getSegmentVelocity(int index) const
 {
 /*
@@ -554,12 +589,30 @@ const Eigen::Twistd& OcraWbiModel::getSegmentVelocity(int index) const
     if (owm_pimpl->freeRoot)
     {
         Eigen::MatrixXd J = getSegmentJacobian(index);
-        owm_pimpl->segVelocity[index] = J.leftCols(6)*owm_pimpl->Troot+J.rightCols(owm_pimpl->nbInternalDofs)*owm_pimpl->dq;
+        owm_pimpl->segVelocity[index] = J.leftCols(6)*owm_pimpl->Troot + J.rightCols(owm_pimpl->nbInternalDofs)*owm_pimpl->dq;
     }
     else
         owm_pimpl->segVelocity[index] = getSegmentJacobian(index)*owm_pimpl->dq;
 
     return owm_pimpl->segVelocity[index];
+}
+
+const KDL::Twist& OcraWbiModel::getSegmentVelocityKDL(int index) const
+{
+    /*
+     printf("Get Segment Velocity : %d\n", index);
+     */
+    
+    if (owm_pimpl->freeRoot)
+    {
+        Eigen::MatrixXd J = getSegmentJacobian(index);
+        owm_pimpl->segVelocityKDL[index] = J.leftCols(6)*owm_pimpl->TrootKDL + J.rightCols(owm_pimpl->nbInternalDofs)*owm_pimpl->dq;
+    }
+    else
+        owm_pimpl->segVelocityKDL[index] = ocra::util::EigenVectorToKDLTwist(getSegmentJacobian(index)*owm_pimpl->dq);
+    
+    return owm_pimpl->segVelocityKDL[index];
+
 }
 
 double OcraWbiModel::getSegmentMass(int index) const
@@ -660,7 +713,7 @@ const Eigen::Matrix<double,6,Eigen::Dynamic>& OcraWbiModel::getSegmentJacobian(i
     }
     else
         owm_pimpl->segJacobian[index] = owm_pimpl->segJacobian_full_ocra[index].rightCols(owm_pimpl->nbInternalDofs);
-    
+
     return owm_pimpl->segJacobian[index];
 }
 
@@ -699,6 +752,17 @@ const Eigen::Twistd& OcraWbiModel::getSegmentJdotQdot(int index) const
     return owm_pimpl->segJdotQdot[index];
 }
 
+const KDL::Twist& OcraWbiModel::getSegmentJdotQdotKDL(int index) const
+{
+    Eigen::VectorXd Tseg(6);
+    
+    robot->computeDJdq(owm_pimpl->q.data(),owm_pimpl->Hroot_wbi,owm_pimpl->dq.data(),owm_pimpl->Troot_wbi.data(),index,Tseg.data());
+    
+    owm_pimpl->segJdotQdotKDL[index] = ocra::util::EigenVectorToKDLTwist(Tseg);
+    
+    return owm_pimpl->segJdotQdotKDL[index];
+}
+
 void OcraWbiModel::doSetJointPositions(const Eigen::VectorXd& q)
 {
 /*
@@ -732,10 +796,23 @@ void OcraWbiModel::doSetFreeFlyerPosition(const Eigen::Displacementd& Hroot)
     OcraWbiConversions::eigenDispdToWbiFrame(owm_pimpl->Hroot, owm_pimpl->Hroot_wbi);
 }
 
+void OcraWbiModel::doSetFreeFlyerPositionKDL(const KDL::Frame& Hroot)
+{
+    owm_pimpl->HrootKDL = Hroot;
+    OcraWbiConversions::KDLFrameTowbiFrame(owm_pimpl->HrootKDL, owm_pimpl->Hroot_wbi);
+}
+
 void OcraWbiModel::doSetFreeFlyerVelocity(const Eigen::Twistd& Troot)
 {
     owm_pimpl->Troot = Troot;
     OcraWbiConversions::ocraToWbiTwistVector(owm_pimpl->Troot, owm_pimpl->Troot_wbi);
+}
+
+void OcraWbiModel::doSetFreeFlyerVelocityKDL(const KDL::Twist& Troot)
+{
+    owm_pimpl->TrootKDL = Troot;
+    //TODO: Originally Troot_wbi is an Eigen::Twistd vector
+    owm_pimpl->Troot_wbiKDL = Troot;
 }
 
 int OcraWbiModel::doGetSegmentIndex(const std::string& name) const
@@ -791,6 +868,12 @@ void OcraWbiModel::doSetState(const Eigen::VectorXd& q, const Eigen::VectorXd& q
 }
 
 void OcraWbiModel::doSetState(const Eigen::Displacementd& H_root, const Eigen::VectorXd& q, const Eigen::Twistd& T_root, const Eigen::VectorXd& q_dot)
+{
+    updateCoMPosition();
+    updateCoMVelocity();
+}
+
+void OcraWbiModel::doSetStateKDL(const KDL::Frame& H_root, const Eigen::VectorXd& q, const KDL::Twist& T_root, const Eigen::VectorXd& q_dot)
 {
     updateCoMPosition();
     updateCoMVelocity();
