@@ -34,6 +34,7 @@
 #include <yarp/os/Log.h>
 #include "ocra-icub/OcraWbiConversions.h"
 #include "ocra-icub/Utilities.h"
+#include "ocra/util/KDLUtilities.h"
 
 namespace ocra_icub
 {
@@ -51,7 +52,7 @@ public:
     virtual ~OcraWbiModel();
 
 //=============================General functions==============================//
-    virtual int                          nbSegments               () const;
+    virtual int                           nbSegments               () const;
     virtual const Eigen::VectorXd&       getActuatedDofs          () const;
     virtual const Eigen::VectorXd&       getJointLowerLimits      () const;
     virtual const Eigen::VectorXd&       getJointUpperLimits      () const;
@@ -60,11 +61,13 @@ public:
     virtual const Eigen::VectorXd&       getJointAccelerations    () const;
     virtual const Eigen::VectorXd&       getJointTorques          () const;
 
-    virtual const Eigen::Displacementd&  getFreeFlyerPosition     () const;
+    virtual const Eigen::Displacementd&   getFreeFlyerPosition     () const;
+    virtual const KDL::Frame&             getFreeFlyerPositionKDL  () const;
     virtual const Eigen::Twistd&         getFreeFlyerVelocity     () const;
+    virtual const KDL::Twist&             getFreeFlyerVelocityKDL  () const;
 
-    virtual const std::string&           getJointName             (int index) const;
-    virtual const int                    getSegmentIndex          (std::string segmentName) const;
+    virtual const std::string&            getJointName             (int index) const;
+    virtual const int                     getSegmentIndex          (std::string segmentName) const;
 
 //=============================Dynamic functions==============================//
     virtual const Eigen::MatrixXd&       getInertiaMatrix         () const;
@@ -78,7 +81,7 @@ public:
     virtual double                                         getMass            () const;
     virtual const Eigen::Vector3d&                         getCoMPosition     () const;
     void                                                   updateCoMPosition();
-    void                                                   updateCoMVelocity();    
+    void                                                   updateCoMVelocity();
     virtual const Eigen::Vector3d&                         getCoMVelocity     () const;
     virtual const Eigen::Vector3d&                         getCoMAcceleration () const;
     virtual const Eigen::Vector3d&                         getCoMJdotQdot     () const;
@@ -89,17 +92,21 @@ public:
 
 //=============================Segment functions==============================//
     virtual const Eigen::Displacementd&                    getSegmentPosition          (int index) const;
+    virtual const KDL::Frame&                              getSegmentPositionKDL          (int index) const;
     virtual const Eigen::Twistd&                           getSegmentVelocity          (int index) const;
+    virtual const KDL::Twist&                              getSegmentVelocityKDL          (int index) const;
     virtual double                                         getSegmentMass              (int index) const;
     virtual const Eigen::Vector3d&                         getSegmentCoM               (int index) const;
     virtual const Eigen::Matrix<double,6,6>&               getSegmentMassMatrix        (int index) const;
     virtual const Eigen::Vector3d&                         getSegmentMomentsOfInertia  (int index) const;
+    //TODO: Find out which is the best data structure to replace Rotation3d in KDL
     virtual const Eigen::Rotation3d&                       getSegmentInertiaAxes       (int index) const;
     virtual const Eigen::Matrix<double,6,Eigen::Dynamic>&  getSegmentJacobian          (int index) const;
     virtual const Eigen::Matrix<double,6,Eigen::Dynamic>&  getSegmentJacobian          (int index, wbi::Frame H_world_root) const;
     virtual const Eigen::Matrix<double,6,Eigen::Dynamic>&  getSegmentJdot              (int index) const;
     virtual const Eigen::Matrix<double,6,Eigen::Dynamic>&  getJointJacobian            (int index) const;
     virtual const Eigen::Twistd&                           getSegmentJdotQdot          (int index) const;
+    virtual const KDL::Twist&                              getSegmentJdotQdotKDL           (int index) const;
 
     void printAllData();
 
@@ -114,12 +121,15 @@ protected:
     virtual void  doSetState(const Eigen::VectorXd& q, const Eigen::VectorXd& q_dot);
 
     virtual void  doSetState(const Eigen::Displacementd& H_root, const Eigen::VectorXd& q, const Eigen::Twistd& T_root, const Eigen::VectorXd& q_dot);
+    virtual void  doSetStateKDL(const KDL::Frame& H_root, const Eigen::VectorXd& q, const KDL::Twist& T_root, const Eigen::VectorXd& q_dot);
 
     virtual void                doSetJointPositions     (const Eigen::VectorXd& q);
     virtual void                doSetJointVelocities    (const Eigen::VectorXd& dq);
     virtual void                doSetJointAccelerations (const Eigen::VectorXd& ddq);
     virtual void                doSetFreeFlyerPosition  (const Eigen::Displacementd& Hroot);
+    virtual void                doSetFreeFlyerPositionKDL  (const KDL::Frame& Hroot);
     virtual void                doSetFreeFlyerVelocity  (const Eigen::Twistd& Troot);
+    virtual void                doSetFreeFlyerVelocityKDL  (const KDL::Twist& Troot);
 
 //============================Index name functions============================//
     virtual int                 doGetSegmentIndex       (const std::string& name) const;

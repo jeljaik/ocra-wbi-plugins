@@ -152,8 +152,10 @@ bool Thread::threadInit()
             std::cout << "\033[1;31m[WARNING-ODOMETRY Thread::threadInit]\033[0m You're trying to activate ODOMETRY but isFloatingBase is false. Launch ocra-icub-server again with --floatingBase" << std::endl;
     }
 
-    if (ctrlOptions.useOdometry)
+    if (ctrlOptions.useOdometry) {
         ctrlServer->updateModel();
+        ctrlServer->updateModelKDL();
+    }
 
     model = ctrlServer->getRobotModel();
     // Construct rpc server callback and bind to the control thread.
