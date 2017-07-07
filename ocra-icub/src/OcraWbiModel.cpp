@@ -875,6 +875,7 @@ void OcraWbiModel::doSetState(const Eigen::Displacementd& H_root, const Eigen::V
 
 void OcraWbiModel::doSetStateKDL(const KDL::Frame& H_root, const Eigen::VectorXd& q, const KDL::Twist& T_root, const Eigen::VectorXd& q_dot)
 {
+    //TODO: Update with updateCoMPositionKDL and CoMVelocityKDL
     updateCoMPosition();
     updateCoMVelocity();
 }
