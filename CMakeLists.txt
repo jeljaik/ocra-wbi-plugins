@@ -65,7 +65,7 @@ include(YarpInstallationHelpers)
 yarp_configure_external_installation(codyco)
 
 # Adding RPATH support
-option(OCRA_ICUB_ENABLE_RPATH "Enable RPATH for this library" FALSE)
+option(OCRA_ICUB_ENABLE_RPATH "Enable RPATH for this library" TRUE)
 # mark_as_advanced(OCRA_ICUB_ENABLE_RPATH)
 include(AddInstallRPATHSupport)
 add_install_rpath_support(BIN_DIRS "${CMAKE_INSTALL_PREFIX}/bin"

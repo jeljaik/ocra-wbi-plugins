@@ -153,8 +153,11 @@ bool Thread::threadInit()
     }
 
     if (ctrlOptions.useOdometry) {
+#ifndef OCRA_USES_KDL
         ctrlServer->updateModel();
+#else
         ctrlServer->updateModelKDL();
+#endif
     }
 
     model = ctrlServer->getRobotModel();
@@ -577,7 +580,11 @@ void Thread::putAnklesIntoIdle(double idleTime)
     OCRA_INFO("Done. Resuming controller startup.")
 
     // Now we need to manually call an update on the model because the model state has changed but the controller server doesn't know about it because the change didn't happen in the `run()` method.
+#ifndef OCRA_USES_KDL
     ctrlServer->updateModel();
+#else
+    ctrlServer->updateModelKDL();
+#endif
     // Also, we update the initial posture of the robot so we go back to a good home position when we close the controller server.
     yarpWbi->getEstimates(wbi::ESTIMATE_JOINT_POS, initialPosture.data(), ALL_JOINTS);
 }
