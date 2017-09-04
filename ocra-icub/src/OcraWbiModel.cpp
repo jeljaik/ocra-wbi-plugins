@@ -438,6 +438,17 @@ void OcraWbiModel::updateCoMPosition() {
 //     Eigen::Vector3d tmp = owm_pimpl->pos_com;
 }
 
+void OcraWbiModel::updateCoMPositionKDL() {
+    wbi::Frame H;
+    robot->computeH(owm_pimpl->q.data(),owm_pimpl->Hroot_wbi,wbi::iWholeBodyModel::COM_LINK_ID,H);
+    
+    KDL::Frame H_KDL;
+    this->mutex.lock();
+    OcraWbiConversions::wbiFrameToKDLFrame(H, owm_pimpl->H_comKDL);
+    owm_pimpl->pos_com =  ocra::util::KDLVectorToEigenVector3d(owm_pimpl->H_comKDL.p);
+    this->mutex.unlock();
+}
+
 const Eigen::Vector3d& OcraWbiModel::getCoMVelocity() const
 {
 /*
@@ -473,6 +484,32 @@ void OcraWbiModel::updateCoMVelocity() {
     this->mutex.unlock();
 
     owm_pimpl->vel_com_old = owm_pimpl->vel_com;
+}
+
+void OcraWbiModel::updateCoMVelocityKDL() {
+    if (owm_pimpl->freeRoot)
+    {
+        Eigen::MatrixXd J = getCoMJacobian();
+        this->mutex.lock();
+        KDL::Twist tmpKDLTwist = J.leftCols(6)*owm_pimpl->TrootKDL;
+        Eigen::Vector3d vel_com;
+        vel_com = ocra::util::KDLTwistToEigenVectorXd(tmpKDLTwist) + J.rightCols(owm_pimpl->nbInternalDofs)*owm_pimpl->dq;
+        owm_pimpl->vel_com = vel_com;
+        this->mutex.unlock();
+    }
+    else {
+        this->mutex.lock();
+        owm_pimpl->vel_com = getCoMJacobian()*owm_pimpl->dq;
+        this->mutex.unlock();
+    }
+    
+    // Differentiating velocity
+    this->mutex.lock();
+    owm_pimpl->acc_com = (1.0/0.010)*(owm_pimpl->vel_com - owm_pimpl->vel_com_old);
+    this->mutex.unlock();
+    
+    owm_pimpl->vel_com_old = owm_pimpl->vel_com;
+
 }
 
 const Eigen::Vector3d& OcraWbiModel::getCoMAcceleration() const
@@ -876,8 +913,8 @@ void OcraWbiModel::doSetState(const Eigen::Displacementd& H_root, const Eigen::V
 void OcraWbiModel::doSetStateKDL(const KDL::Frame& H_root, const Eigen::VectorXd& q, const KDL::Twist& T_root, const Eigen::VectorXd& q_dot)
 {
     //TODO: Update with updateCoMPositionKDL and CoMVelocityKDL
-    updateCoMPosition();
-    updateCoMVelocity();
+    updateCoMPositionKDL();
+    updateCoMVelocityKDL();
 }
 
 void OcraWbiModel::printAllData()
