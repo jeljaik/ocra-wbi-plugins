@@ -345,25 +345,32 @@ const Eigen::MatrixXd& OcraWbiModel::getDampingMatrix() const
     // not set so juts pass owm_pimpl->B back
     return owm_pimpl->B;
 }
-
+    
 const Eigen::VectorXd& OcraWbiModel::getNonLinearTerms() const
 {
     Eigen::Vector3d zero = Eigen::Vector3d::Zero();
-    bool res = robot->computeGeneralizedBiasForces(owm_pimpl->q.data(), owm_pimpl->Hroot_wbi, owm_pimpl->dq.data(), owm_pimpl->Troot_wbi.data(), zero.data(), owm_pimpl->nl_full.data());
+    //TODO: Make sure that data() from Troot_wbi is serialized the same way as the owm_pimpl-> Troot_wbiKDL
+#ifdef OCRA_USES_KDL
+    Eigen::VectorXd troot_wbi_tmp(6);
+    // Troot_wbi.data >> rot, vel;
+    Eigen::Vector3d rot = ocra::util::KDLVectorToEigenVector3d(owm_pimpl->Troot_wbiKDL.rot);
+    Eigen::Vector3d vel = ocra::util::KDLVectorToEigenVector3d(owm_pimpl->Troot_wbiKDL.vel);
+    troot_wbi_tmp << rot, vel;
+    bool res = robot->computeGeneralizedBiasForces(owm_pimpl->q.data(),
+                                                   owm_pimpl->Hroot_wbi,
+                                                   owm_pimpl->dq.data(),
+                                                   troot_wbi_tmp.data(),
+                                                   zero.data(),
+                                                   owm_pimpl->nl_full.data());
+#else
+    bool res = robot->computeGeneralizedBiasForces(owm_pimpl->q.data(),
+                                                   owm_pimpl->Hroot_wbi,
+                                                   owm_pimpl->dq.data(),
+                                                   owm_pimpl->Troot_wbi.data(),
+                                                   zero.data(),
+                                                   owm_pimpl->nl_full.data());
+#endif // OCRA_USES_KDL
 
-    if (owm_pimpl->freeRoot)
-        OcraWbiConversions::wbiToOcraBodyVector(owm_pimpl->nbInternalDofs, owm_pimpl->nl_full, owm_pimpl->nl);
-    else
-        owm_pimpl->nl = owm_pimpl->nl_full.segment(FREE_ROOT_DOF, owm_pimpl->nbDofs);
-
-/*
-    printf("Get Non Linear\n");
-    std::cout << owm_pimpl->nl.transpose() << std::endl;
-    printf("Get Non Linear Full\n");
-    std::cout << owm_pimpl->nl_full.transpose() << std::endl;
-*/
-
-    return owm_pimpl->nl;
 }
 
 const Eigen::VectorXd& OcraWbiModel::getLinearTerms() const
@@ -379,8 +386,22 @@ const Eigen::VectorXd& OcraWbiModel::getGravityTerms() const
 {
     Eigen::VectorXd dq_zero = Eigen::VectorXd::Zero(owm_pimpl->nbInternalDofs);
     Eigen::Vector3d g(g_vector);
-
-    bool res = robot->computeGeneralizedBiasForces(owm_pimpl->q.data(), owm_pimpl->Hroot_wbi, dq_zero.data(), owm_pimpl->Troot_wbi.data(), g.data(), owm_pimpl->g_full.data());
+    bool res = false;
+#ifdef OCRA_USES_KDL
+    Eigen::VectorXd troot_wbi_tmp(6);
+    // Troot_wbi.data >> rot, vel;
+    Eigen::Vector3d rot = ocra::util::KDLVectorToEigenVector3d(owm_pimpl->Troot_wbiKDL.rot);
+    Eigen::Vector3d vel = ocra::util::KDLVectorToEigenVector3d(owm_pimpl->Troot_wbiKDL.vel);
+    troot_wbi_tmp << rot, vel;
+    res = robot->computeGeneralizedBiasForces(owm_pimpl->q.data(),
+                                                   owm_pimpl->Hroot_wbi,
+                                                   dq_zero.data(),
+                                                   owm_pimpl->troot_wbi_tmp.data(),
+                                                   g.data(),
+                                                   owm_pimpl->g_full.data());
+#else
+    res = robot->computeGeneralizedBiasForces(owm_pimpl->q.data(), owm_pimpl->Hroot_wbi, dq_zero.data(), owm_pimpl->Troot_wbi.data(), g.data(), owm_pimpl->g_full.data());
+#endif // OCRA_USES_KDL
 
     if (owm_pimpl->freeRoot)
         OcraWbiConversions::wbiToOcraBodyVector(owm_pimpl->nbInternalDofs, owm_pimpl->g_full, owm_pimpl->g);
@@ -912,7 +933,6 @@ void OcraWbiModel::doSetState(const Eigen::Displacementd& H_root, const Eigen::V
 
 void OcraWbiModel::doSetStateKDL(const KDL::Frame& H_root, const Eigen::VectorXd& q, const KDL::Twist& T_root, const Eigen::VectorXd& q_dot)
 {
-    //TODO: Update with updateCoMPositionKDL and CoMVelocityKDL
     updateCoMPositionKDL();
     updateCoMVelocityKDL();
 }
