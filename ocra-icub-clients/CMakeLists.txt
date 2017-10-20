@@ -31,7 +31,7 @@ if (GUROBI_FOUND)
         string(ASCII 27 Esc)
     endif()
     message("${Esc}[1;35m  -- Gurobi was found in your system. adding walking-client! ${Esc}[m")
-    add_subdirectory(walking-client)
+#    add_subdirectory(walking-client)
 endif()
 
 # add_subdirectory(your-client)

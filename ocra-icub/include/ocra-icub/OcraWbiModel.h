@@ -81,8 +81,8 @@ public:
     virtual double                                         getMass            () const;
     virtual const Eigen::Vector3d&                         getCoMPosition     () const;
     void                                                   updateCoMPosition();
-    void                                                   updateCoMVelocity();
     void                                                   updateCoMPositionKDL();
+    void                                                   updateCoMVelocity();
     void                                                   updateCoMVelocityKDL();
     virtual const Eigen::Vector3d&                         getCoMVelocity     () const;
     virtual const Eigen::Vector3d&                         getCoMAcceleration () const;

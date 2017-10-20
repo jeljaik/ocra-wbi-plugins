@@ -183,8 +183,10 @@ bool Thread::threadInit()
 
     // Now we can add our tasks! Yay! Yupeee!
     ctrlServer->addTasksFromXmlFile(ctrlOptions.startupTaskSetPath);
-
+    
+    //TODO We need a KDL equivalent for this line!!!
     l_foot_disp_inverse = model->getSegmentPosition("l_foot").inverse();
+    std::cout << "[ATTENTION!! l_foot_disp_inverse is: " << l_foot_disp_inverse << std::endl;
 
     controllerStatus = ocra_icub::CONTROLLER_SERVER_RUNNING;
     if(ctrlOptions.runInDebugMode || ctrlOptions.noOutputMode) {

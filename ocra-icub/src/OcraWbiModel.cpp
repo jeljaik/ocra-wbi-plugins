@@ -460,13 +460,15 @@ void OcraWbiModel::updateCoMPosition() {
 }
 
 void OcraWbiModel::updateCoMPositionKDL() {
+    // Get rototranslation from world to COM through the yarpWholeBodyInterface
     wbi::Frame H;
-    robot->computeH(owm_pimpl->q.data(),owm_pimpl->Hroot_wbi,wbi::iWholeBodyModel::COM_LINK_ID,H);
+    robot->computeH(owm_pimpl->q.data(), owm_pimpl->Hroot_wbi, wbi::iWholeBodyModel::COM_LINK_ID, H);
     
-    KDL::Frame H_KDL;
+    // Convert rototranslation from wbi frame to kdl frame and update 
     this->mutex.lock();
     OcraWbiConversions::wbiFrameToKDLFrame(H, owm_pimpl->H_comKDL);
-    owm_pimpl->pos_com =  ocra::util::KDLVectorToEigenVector3d(owm_pimpl->H_comKDL.p);
+    Eigen::Vector3d pos_com = ocra::util::KDLVectorToEigenVector3d(owm_pimpl->H_comKDL.p);
+    owm_pimpl->pos_com = pos_com;
     this->mutex.unlock();
 }
 
@@ -507,18 +509,19 @@ void OcraWbiModel::updateCoMVelocity() {
     owm_pimpl->vel_com_old = owm_pimpl->vel_com;
 }
 
-void OcraWbiModel::updateCoMVelocityKDL() {
+void OcraWbiModel::updateCoMVelocityKDL()
+{
     if (owm_pimpl->freeRoot)
     {
         Eigen::MatrixXd J = getCoMJacobian();
-        this->mutex.lock();
-        KDL::Twist tmpKDLTwist = J.leftCols(6)*owm_pimpl->TrootKDL;
         Eigen::Vector3d vel_com;
-        vel_com = ocra::util::KDLTwistToEigenVectorXd(tmpKDLTwist) + J.rightCols(owm_pimpl->nbInternalDofs)*owm_pimpl->dq;
+        this->mutex.lock();
+        Eigen::VectorXd Troot(6);
+        Troot = ocra::util::KDLTwistToEigenVectorXd(owm_pimpl->TrootKDL);
+        vel_com = J.leftCols(6)*Troot + J.rightCols(owm_pimpl->nbInternalDofs)*owm_pimpl->dq;
         owm_pimpl->vel_com = vel_com;
         this->mutex.unlock();
-    }
-    else {
+    } else {
         this->mutex.lock();
         owm_pimpl->vel_com = getCoMJacobian()*owm_pimpl->dq;
         this->mutex.unlock();
@@ -528,7 +531,7 @@ void OcraWbiModel::updateCoMVelocityKDL() {
     this->mutex.lock();
     owm_pimpl->acc_com = (1.0/0.010)*(owm_pimpl->vel_com - owm_pimpl->vel_com_old);
     this->mutex.unlock();
-    
+
     owm_pimpl->vel_com_old = owm_pimpl->vel_com;
 
 }
@@ -664,7 +667,10 @@ const KDL::Twist& OcraWbiModel::getSegmentVelocityKDL(int index) const
     if (owm_pimpl->freeRoot)
     {
         Eigen::MatrixXd J = getSegmentJacobian(index);
-        owm_pimpl->segVelocityKDL[index] = J.leftCols(6)*owm_pimpl->TrootKDL + J.rightCols(owm_pimpl->nbInternalDofs)*owm_pimpl->dq;
+        KDL::Twist tmpTwist = J.leftCols(6)*owm_pimpl->TrootKDL;
+        Eigen::VectorXd tmpVec = J.rightCols(owm_pimpl->nbInternalDofs)*owm_pimpl->dq;
+        KDL::Twist result = tmpTwist + tmpVec;
+        owm_pimpl->segVelocityKDL[index] = result;
     }
     else
         owm_pimpl->segVelocityKDL[index] = ocra::util::EigenVectorToKDLTwist(getSegmentJacobian(index)*owm_pimpl->dq);
