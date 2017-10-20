@@ -45,6 +45,11 @@ if(USING_ATOM_EDITOR)
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
 
+option(OCRA_USES_KDL "Enables all KDL-based methods for migration" FALSE)
+if(OCRA_USES_KDL)
+    add_definitions(-DOCRA_USES_KDL)
+endif()
+
 find_package(YARP REQUIRED)
 find_package(YCM REQUIRED)
 find_package(iDynTree REQUIRED)

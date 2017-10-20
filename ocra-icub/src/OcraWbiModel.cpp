@@ -350,9 +350,15 @@ const Eigen::VectorXd& OcraWbiModel::getNonLinearTerms() const
 {
     Eigen::Vector3d zero = Eigen::Vector3d::Zero();
     //TODO: Make sure that data() from Troot_wbi is serialized the same way as the owm_pimpl-> Troot_wbiKDL
-#ifdef OCRA_USES_KDL
+#ifndef OCRA_USES_KDL
+    bool res = robot->computeGeneralizedBiasForces(owm_pimpl->q.data(),
+                                                   owm_pimpl->Hroot_wbi,
+                                                   owm_pimpl->dq.data(),
+                                                   owm_pimpl->Troot_wbi.data(),
+                                                   zero.data(),
+                                                   owm_pimpl->nl_full.data());
+#else
     Eigen::VectorXd troot_wbi_tmp(6);
-    // Troot_wbi.data >> rot, vel;
     Eigen::Vector3d rot = ocra::util::KDLVectorToEigenVector3d(owm_pimpl->Troot_wbiKDL.rot);
     Eigen::Vector3d vel = ocra::util::KDLVectorToEigenVector3d(owm_pimpl->Troot_wbiKDL.vel);
     troot_wbi_tmp << rot, vel;
@@ -362,14 +368,14 @@ const Eigen::VectorXd& OcraWbiModel::getNonLinearTerms() const
                                                    troot_wbi_tmp.data(),
                                                    zero.data(),
                                                    owm_pimpl->nl_full.data());
-#else
-    bool res = robot->computeGeneralizedBiasForces(owm_pimpl->q.data(),
-                                                   owm_pimpl->Hroot_wbi,
-                                                   owm_pimpl->dq.data(),
-                                                   owm_pimpl->Troot_wbi.data(),
-                                                   zero.data(),
-                                                   owm_pimpl->nl_full.data());
 #endif // OCRA_USES_KDL
+    
+    if (owm_pimpl->freeRoot)
+        OcraWbiConversions::wbiToOcraBodyVector(owm_pimpl->nbInternalDofs, owm_pimpl->nl_full, owm_pimpl->nl);
+    else
+        owm_pimpl->nl = owm_pimpl->nl_full.segment(FREE_ROOT_DOF, owm_pimpl->nbDofs);
+    
+    return owm_pimpl->nl;
 
 }
 
@@ -396,11 +402,16 @@ const Eigen::VectorXd& OcraWbiModel::getGravityTerms() const
     res = robot->computeGeneralizedBiasForces(owm_pimpl->q.data(),
                                                    owm_pimpl->Hroot_wbi,
                                                    dq_zero.data(),
-                                                   owm_pimpl->troot_wbi_tmp.data(),
+                                                   troot_wbi_tmp.data(),
                                                    g.data(),
                                                    owm_pimpl->g_full.data());
 #else
-    res = robot->computeGeneralizedBiasForces(owm_pimpl->q.data(), owm_pimpl->Hroot_wbi, dq_zero.data(), owm_pimpl->Troot_wbi.data(), g.data(), owm_pimpl->g_full.data());
+    res = robot->computeGeneralizedBiasForces(owm_pimpl->q.data(), 
+                                              owm_pimpl->Hroot_wbi, 
+                                              dq_zero.data(), 
+                                              owm_pimpl->Troot_wbi.data(), 
+                                              g.data(), 
+                                              owm_pimpl->g_full.data());
 #endif // OCRA_USES_KDL
 
     if (owm_pimpl->freeRoot)
