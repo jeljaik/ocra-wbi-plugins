@@ -6,7 +6,7 @@
         Not providing a desired value for joint tasks will default to the current joint position.
  -->
 <task name="FullPosture" type="FullPosture">
-   <params kp="5.0" kd="4.5" weight="0.0001" />
+   <params kp="10.0" weight="0.0001" />
    <joints>
        <joint name="l_hip_pitch"    weight="0.0004"/>
        <joint name="l_hip_roll"     weight="0.1"/>
@@ -27,7 +27,7 @@
 </task>
 
 <task name="ComTask" type="CoM">
-    <params kp="40" weight="1.0" axes="XY"/>
+    <params kp="20" weight="1.0" axes="XY"/>
 </task>
 
 <!-- <task name="TorsoCartesianTask" type="Cartesian">
@@ -35,23 +35,21 @@
     <params kp="1" weight="0.01" axes="XY"/>
 </task> -->
 
-<task name="TorsoCartesianTask" type="Cartesian">
+<!-- <task name="TorsoCartesianTask" type="Cartesian">
     <segment>neck_1</segment>
     <params kp="1" weight="0.01" axes="YZ"/>
-</task>
+</task> -->
 
 <task name="LeftHandCartesian" type="Cartesian">
     <segment>l_hand</segment>
-    <params kp="40.0" weight="0.01" axes="XYZ" />
-    <offset  x="0.05" y="0.0" z="0.0" />
-    <!-- <desired  x="-0.2" y="-0.25" z="1.0" /> -->
+    <params kp="1.0" weight="0.01" axes="XYZ" />
 </task>
 
-<task name="RightHandCartesian" type="Cartesian">
+<!-- <task name="RightHandCartesian" type="Cartesian">
     <segment>r_hand</segment>
     <params kp="40.0" weight="0.01" axes="XYZ" />
     <offset  x="0.05" y="0.0" z="0.0" />
-</task>
+</task> -->
 
 <!-- Left foot contacts -->
 
